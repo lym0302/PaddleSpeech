@@ -3,16 +3,22 @@ This example shows how to finetune your own AM based on FastSpeech2 with AISHELL
 
 We use AISHELL-3 to train a multi-speaker fastspeech2 model. You can refer [examples/aishell3/tts3](https://github.com/lym0302/PaddleSpeech/tree/develop/examples/aishell3/tts3) to train multi-speaker fastspeech2 from scratch.
 
+
 ## Prepare
-### Download Pretrained Fastspeech2 model
-Assume the path to the model is `./pretrained_models`. Download pretrained fastspeech2 model with aishell3: [fastspeech2_aishell3_ckpt_1.1.0.zip](https://paddlespeech.bj.bcebos.com/Parakeet/released_models/fastspeech2/fastspeech2_aishell3_ckpt_1.1.0.zip). 
+### Download Pretrained model
+Assume the path to the model is `./pretrained_models`. Download pretrained fastspeech2 model with aishell3: [fastspeech2_aishell3_ckpt_1.1.0.zip](https://paddlespeech.bj.bcebos.com/Parakeet/released_models/fastspeech2/fastspeech2_aishell3_ckpt_1.1.0.zip) for finetuning. Download pretrained HiFiGAN model with aishell3: [hifigan_aishell3_ckpt_0.2.0](https://paddlespeech.bj.bcebos.com/Parakeet/released_models/hifigan/hifigan_aishell3_ckpt_0.2.0.zip) for synthesis.
 
 ```bash
 mkdir -p pretrained_models && cd pretrained_models
+# pretrained fastspeech2 model
 wget https://paddlespeech.bj.bcebos.com/Parakeet/released_models/fastspeech2/fastspeech2_aishell3_ckpt_1.1.0.zip 
 unzip fastspeech2_aishell3_ckpt_1.1.0.zip
+# pretrained hifigan model
+wget https://paddlespeech.bj.bcebos.com/Parakeet/released_models/hifigan/hifigan_aishell3_ckpt_0.2.0.zip
+unzip hifigan_aishell3_ckpt_0.2.0.zip
 cd ../
 ```
+
 ### Download MFA tools and pretrained model
 Assume the path to the MFA tool is `./tools`. Download [MFA](https://github.com/MontrealCorpusTools/Montreal-Forced-Aligner/releases/download/v1.0.1/montreal-forced-aligner_linux.tar.gz) and pretrained MFA models with aishell3: [aishell3_model.zip](https://paddlespeech.bj.bcebos.com/MFA/ernie_sat/aishell3_model.zip).
 
@@ -76,13 +82,13 @@ When "Prepare" done. The structure of the current directory is listed below.
 ```
 
 ### Set finetune.yaml
-`finetune.yaml` contains some configurations for fine-tuning. You can try various options to fine better result.
+`conf/finetune.yaml` contains some configurations for fine-tuning. You can try various options to fine better result. The value of frozen_layers can be change according `conf/fastspeech2_layers.txt` which is the model layer of fastspeech2.
+
 Arguments:
   - `batch_size`: finetune batch size. Default: -1, means 64 which same to pretrained model
   - `learning_rate`: learning rate. Default: 0.0001
   - `num_snapshots`: number of save models. Default: -1, means 5 which same to pretrained model
   - `frozen_layers`: frozen layers. must be a list. If you don't want to frozen any layer, set []. 
-
 
 
 ## Get Started
@@ -102,54 +108,40 @@ You can choose a range of stages you want to run, or set `stage` equal to `stop-
 Finetune a FastSpeech2 model. 
 
 ```bash
-./run.sh --stage 0 --stop-stage 0
+./run.sh --stage 0 --stop-stage 5
 ```
-`stage 0` of `run.sh` calls `finetune.py`, here's the complete help message.
+`stage 5` of `run.sh` calls `local/finetune.py`, here's the complete help message.
 
 ```text
-usage: finetune.py [-h] [--input_dir INPUT_DIR] [--pretrained_model_dir PRETRAINED_MODEL_DIR]
-                [--mfa_dir MFA_DIR] [--dump_dir DUMP_DIR]
-                [--output_dir OUTPUT_DIR] [--lang LANG]
-                [--ngpu NGPU]
+usage: finetune.py [-h] [--pretrained_model_dir PRETRAINED_MODEL_DIR]
+                [--dump_dir DUMP_DIR] [--output_dir OUTPUT_DIR] [--ngpu NGPU]
+                [--epoch EPOCH] [--finetune_config FINETUNE_CONFIG]
 
 optional arguments:
-  -h, --help            show this help message and exit
-  --input_dir INPUT_DIR       
-                        directory containing audio and label file
+  -h, --help           Show this help message and exit
   --pretrained_model_dir PRETRAINED_MODEL_DIR
                        Path to pretrained model
-  --mfa_dir MFA_DIR    directory to save aligned files
   --dump_dir DUMP_DIR
                        directory to save feature files and metadata
   --output_dir OUTPUT_DIR      
-                       directory to save finetune model 
-  --lang LANG          Choose input audio language, zh or en
-  --ngpu NGPU          if ngpu=0, use cpu
-  --epoch EPOCH        the epoch of finetune
-  --batch_size BATCH_SIZE        
-                       the batch size of finetune, default -1 means same as pretrained model
-
+                       Directory to save finetune model 
+  --ngpu NGPU          The number of gpu, if ngpu=0, use cpu
+  --epoch EPOCH        The epoch of finetune
+  --finetune_config FINETUNE_CONFIG        
+                       Path to finetune config file
 ```
-1. `--input_dir` is the directory containing audio and label file. 
-2. `--pretrained_model_dir` is the directory incluing pretrained fastspeech2_aishell3 model.
-3. `--mfa_dir` is the directory to save the results of aligning from pretrained MFA_aishell3 model.
-4. `--dump_dir` is the directory including audio feature and metadata.
-5. `--output_dir` is the directory to save finetune model.
-6. `--lang` is the language of input audio, zh or en.
-7. `--ngpu` is the number of gpu.
-8. `--epoch` is the epoch of finetune.
-9. `--batch_size` is the batch size of finetune.
+
+1. `--pretrained_model_dir` is the directory incluing pretrained fastspeech2_aishell3 model.
+2. `--dump_dir` is the directory including audio feature and metadata.
+3. `--output_dir` is the directory to save finetune model.
+4. `--ngpu` is the number of gpu, if ngpu=0, use cpu
+5. `--epoch` is the epoch of finetune.
+6. `--finetune_config` is the path to finetune config file
+ 
 
 ### Synthesizing
 We use [HiFiGAN](https://github.com/PaddlePaddle/PaddleSpeech/tree/develop/examples/aishell3/voc5) as the neural vocoder.
 Assume the path to the hifigan model is `./pretrained_models`. Download the pretrained HiFiGAN model from [hifigan_aishell3_ckpt_0.2.0](https://paddlespeech.bj.bcebos.com/Parakeet/released_models/hifigan/hifigan_aishell3_ckpt_0.2.0.zip) and unzip it.
-
-```bash
-cd pretrained_models
-wget https://paddlespeech.bj.bcebos.com/Parakeet/released_models/hifigan/hifigan_aishell3_ckpt_0.2.0.zip
-unzip hifigan_aishell3_ckpt_0.2.0.zip
-cd ../
-```
 
 HiFiGAN checkpoint contains files listed below.
 ```text
@@ -160,7 +152,7 @@ hifigan_aishell3_ckpt_0.2.0
 ```
 Modify `ckpt` in `run.sh` to the final model in `exp/default/checkpoints`.
 ```bash
-./run.sh --stage 1 --stop-stage 1
+./run.sh --stage 6 --stop-stage 6
 ```
 `stage 1` of `run.sh` calls `${BIN_DIR}/../synthesize_e2e.py`, which can synthesize waveform from text file.
 
@@ -210,6 +202,7 @@ optional arguments:
   --output_dir OUTPUT_DIR
                         output dir.
 ```
+
 1. `--am` is acoustic model type with the format {model_name}_{dataset}
 2. `--am_config`, `--am_ckpt`, `--am_stat`, `--phones_dict` `--speaker_dict` are arguments for acoustic model, which correspond to the 5 files in the fastspeech2 pretrained model.
 3. `--voc` is vocoder type with the format {model_name}_{dataset}
@@ -218,6 +211,7 @@ optional arguments:
 6. `--text` is the text file, which contains sentences to synthesize.
 7.  `--output_dir` is the directory to save synthesized audio files.
 8. `--ngpu` is the number of gpus to use, if ngpu == 0, use cpu.
+
 
 ### Tips
 If you want to get better audio quality, you can use more audios to finetune.

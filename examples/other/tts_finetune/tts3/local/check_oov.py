@@ -11,10 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import argparse
+import os
 from pathlib import Path
 from typing import Dict
 from typing import List
 from typing import Union
+
+DICT_EN = 'tools/aligner/cmudict-0.7b'
+DICT_ZH = 'tools/aligner/simple.lexicon'
+MODEL_DIR_EN = 'tools/aligner/vctk_model.zip'
+MODEL_DIR_ZH = 'tools/aligner/aishell3_model.zip'
+MFA_PHONE_EN = 'tools/aligner/vctk_model/meta.yaml'
+MFA_PHONE_ZH = 'tools/aligner/aishell3_model/meta.yaml'
+MFA_PATH = 'tools/montreal-forced-aligner/bin'
+os.environ['PATH'] = MFA_PATH + '/:' + os.environ['PATH']
 
 
 def check_phone(label_file: Union[str, Path],
@@ -116,10 +127,94 @@ def get_am_phone(am_phone_file: Union[str, Path]):
 def get_check_result(label_file: Union[str, Path],
                      lexicon_file: Union[str, Path],
                      mfa_phone_file: Union[str, Path],
-                     am_phone_file: Union[str, Path]):
+                     am_phone_file: Union[str, Path],
+                     input_dir: Union[str, Path],
+                     newdir_name: str="newdir"):
+    """Check if there is any audio in the input that contains the oov word according to label_file.
+       Copy audio that does not contain oov word to input_dir / newdir_name.
+       Generate label file and save to input_dir / newdir_name.
+
+
+    Args:
+        label_file (Union[str, Path]): input audio label file, format: utt|pinyin
+        lexicon_file (Union[str, Path]): lexicon file
+        mfa_phone_file (Union[str, Path]): mfa phone file 
+        am_phone_file (Union[str, Path]): pretrained am model phone file
+        input_dir (Union[str, Path]): input dir
+        newdir_name (str): directory name saved after checking oov
+    """
     pinyin_phones = get_pinyin_phones(lexicon_file)
     mfa_phones = get_mfa_phone(mfa_phone_file)
     am_phones = get_am_phone(am_phone_file)
     oov_words, oov_files, oov_file_words = check_phone(
         label_file, pinyin_phones, mfa_phones, am_phones)
-    return oov_words, oov_files, oov_file_words
+
+    input_dir = Path(input_dir).expanduser()
+    new_dir = input_dir / newdir_name
+    new_dir.mkdir(parents=True, exist_ok=True)
+    with open(label_file, "r") as f:
+        for line in f.readlines():
+            utt_id = line.split("|")[0]
+            if utt_id not in oov_files:
+                transcription = line.split("|")[1].strip()
+                wav_file = str(input_dir) + "/" + utt_id + ".wav"
+                new_wav_file = str(new_dir) + "/" + utt_id + ".wav"
+                os.system("cp %s %s" % (wav_file, new_wav_file))
+                single_file = str(new_dir) + "/" + utt_id + ".txt"
+                with open(single_file, "w") as fw:
+                    fw.write(transcription)
+
+
+if __name__ == '__main__':
+    # parse config and args
+    parser = argparse.ArgumentParser(
+        description="Preprocess audio and then extract features.")
+
+    parser.add_argument(
+        "--input_dir",
+        type=str,
+        default="./input/csmsc_mini",
+        help="directory containing audio and label file")
+
+    parser.add_argument(
+        "--pretrained_model_dir",
+        type=str,
+        default="./pretrained_models/fastspeech2_aishell3_ckpt_1.1.0",
+        help="Path to pretrained model")
+
+    parser.add_argument(
+        "--newdir_name",
+        type=str,
+        default="newdir",
+        help="directory name saved after checking oov")
+
+    parser.add_argument(
+        '--lang',
+        type=str,
+        default='zh',
+        choices=['zh', 'en'],
+        help='Choose input audio language. zh or en')
+
+    args = parser.parse_args()
+
+    if args.lang == 'en':
+        lexicon_file = DICT_EN
+        mfa_phone_file = MFA_PHONE_EN
+    elif args.lang == 'zh':
+        lexicon_file = DICT_ZH
+        mfa_phone_file = MFA_PHONE_ZH
+    else:
+        print('please input right lang!!')
+
+    input_dir = Path(args.input_dir).expanduser()
+    pretrained_model_dir = Path(args.pretrained_model_dir).expanduser()
+    am_phone_file = pretrained_model_dir / "phone_id_map.txt"
+    label_file = input_dir / "labels.txt"
+
+    get_check_result(
+        label_file=label_file,
+        lexicon_file=lexicon_file,
+        mfa_phone_file=mfa_phone_file,
+        am_phone_file=am_phone_file,
+        input_dir=input_dir,
+        newdir_name=args.newdir_name)
