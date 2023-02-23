@@ -107,8 +107,24 @@ def evaluate(args):
                     if args.voice_cloning and "spk_emb" in datum:
                         spk_emb = paddle.to_tensor(np.load(datum["spk_emb"]))
                     mel = am_inference(phone_ids, spk_emb=spk_emb)
-                # vocoder
+                elif am_name == 'diffsinger':
+                    phone_ids = paddle.to_tensor(datum["text"])
+                    note = paddle.to_tensor(datum["note"])
+                    note_dur = paddle.to_tensor(datum["note_dur"])
+                    is_slur = paddle.to_tensor(datum["is_slur"])
+                    get_mel_fs2 = False
+                    # mel: [T, mel_bin]
+                    mel = am_inference(
+                        phone_ids,
+                        note=note,
+                        note_dur=note_dur,
+                        is_slur=is_slur,
+                        get_mel_fs2=get_mel_fs2)
+                    # import numpy as np
+                    # mel = np.load("/home/liangyunming/others_code/DiffSinger_lym/diffsinger_mel.npy")
+                    # mel = paddle.to_tensor(mel)
                 wav = voc_inference(mel)
+                
 
             wav = wav.numpy()
             N += wav.size
@@ -119,8 +135,10 @@ def evaluate(args):
             f"{utt_id}, mel: {mel.shape}, wave: {wav.size}, time: {t.elapse}s, Hz: {speed}, RTF: {rtf}."
         )
         sf.write(
+            # str(output_dir / ("xiaojiuwo_diffsinger" + ".wav")), wav, samplerate=am_config.fs)
             str(output_dir / (utt_id + ".wav")), wav, samplerate=am_config.fs)
         print(f"{utt_id} done!")
+        # break
     print(f"generation speed: {N / T}Hz, RTF: {am_config.fs / (N / T) }")
 
 
@@ -134,10 +152,16 @@ def parse_args():
         type=str,
         default='fastspeech2_csmsc',
         choices=[
-            'speedyspeech_csmsc', 'fastspeech2_csmsc', 'fastspeech2_ljspeech',
-            'fastspeech2_aishell3', 'fastspeech2_vctk', 'tacotron2_csmsc',
-            'tacotron2_ljspeech', 'tacotron2_aishell3', 'fastspeech2_mix',
-            'fastspeech2_canton'
+            'speedyspeech_csmsc',
+            'fastspeech2_csmsc',
+            'fastspeech2_ljspeech',
+            'fastspeech2_aishell3',
+            'fastspeech2_vctk',
+            'tacotron2_csmsc',
+            'tacotron2_ljspeech',
+            'tacotron2_aishell3',
+            'fastspeech2_mix',
+            "diffsinger_opencpop",
         ],
         help='Choose acoustic model type of tts task.')
     parser.add_argument(
@@ -170,10 +194,19 @@ def parse_args():
         type=str,
         default='pwgan_csmsc',
         choices=[
-            'pwgan_csmsc', 'pwgan_ljspeech', 'pwgan_aishell3', 'pwgan_vctk',
-            'mb_melgan_csmsc', 'wavernn_csmsc', 'hifigan_csmsc',
-            'hifigan_ljspeech', 'hifigan_aishell3', 'hifigan_vctk',
-            'style_melgan_csmsc'
+            'pwgan_csmsc',
+            'pwgan_ljspeech',
+            'pwgan_aishell3',
+            'pwgan_vctk',
+            'mb_melgan_csmsc',
+            'wavernn_csmsc',
+            'hifigan_csmsc',
+            'hifigan_ljspeech',
+            'hifigan_aishell3',
+            'hifigan_vctk',
+            'style_melgan_csmsc',
+            "pwgan_opencpop",
+            "hifigan_opencpop",
         ],
         help='Choose vocoder type of tts task.')
     parser.add_argument(
