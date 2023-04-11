@@ -13,3 +13,5 @@
 # limitations under the License.
 from .fastspeech2 import *
 from .fastspeech2_updater import *
+from .diffspeech import *
+from .diffspeech_updater import *

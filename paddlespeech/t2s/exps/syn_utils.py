@@ -62,6 +62,10 @@ model_alias = {
     "paddlespeech.t2s.models.diffsinger:DiffSinger",
     "diffsinger_inference":
     "paddlespeech.t2s.models.diffsinger:DiffSingerInference",
+    "diffspeech":
+    "paddlespeech.t2s.models.fastspeech2:DiffSpeech",
+    "diffspeech_inference":
+    "paddlespeech.t2s.models.fastspeech2:DiffSpeechInference",
 
     # voc
     "pwgan":
@@ -151,7 +155,7 @@ def get_test_dataset(test_metadata: List[Dict[str, Any]],
     am_name = am[:am.rindex('_')]
     am_dataset = am[am.rindex('_') + 1:]
     converters = {}
-    if am_name == 'fastspeech2':
+    if am_name == 'fastspeech2' or 'diffspeech':
         fields = ["utt_id", "text"]
         if am_dataset in {"aishell3", "vctk", "mix",
                           "canton"} and speaker_dict is not None:
@@ -198,7 +202,7 @@ def get_dev_dataloader(dev_metadata: List[Dict[str, Any]],
     am_name = am[:am.rindex('_')]
     am_dataset = am[am.rindex('_') + 1:]
     converters = {}
-    if am_name == 'fastspeech2':
+    if am_name == 'fastspeech2' or 'diffspeech':
         fields = ["utt_id", "text"]
         if am_dataset in {"aishell3", "vctk", "mix",
                           "canton"} and speaker_dict is not None:
@@ -396,6 +400,16 @@ def get_am_inference(
     if am_name == 'fastspeech2':
         am = am_class(
             idim=vocab_size, odim=odim, spk_num=spk_num, **am_config["model"])
+    if am_name == 'diffspeech':
+        with open(speech_stretchs, "r") as f:
+            spec_min = np.load(speech_stretchs)[0]
+            spec_max = np.load(speech_stretchs)[1]
+            spec_min = paddle.to_tensor(spec_min)
+            spec_max = paddle.to_tensor(spec_max)
+        am_config["model"]["fastspeech2_params"]["spk_num"] = spk_num
+        am = am_class(spec_min=spec_min,
+            spec_max=spec_max,
+            idim=vocab_size, odim=odim, **am_config["model"])
     elif am_name == 'diffsinger':
         with open(speech_stretchs, "r") as f:
             spec_min = np.load(speech_stretchs)[0]
@@ -470,7 +484,7 @@ def am_to_static(am_inference,
     # model: {model_name}_{dataset}
     am_name = am[:am.rindex('_')]
     am_dataset = am[am.rindex('_') + 1:]
-    if am_name == 'fastspeech2':
+    if am_name == 'fastspeech2' or 'diffspeech':
         if am_dataset in {"aishell3", "vctk", "mix",
                           "canton"} and speaker_dict is not None:
             am_inference = jit.to_static(

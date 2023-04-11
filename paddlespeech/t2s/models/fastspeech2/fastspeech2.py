@@ -601,7 +601,8 @@ class FastSpeech2(nn.Layer):
                  alpha: float=1.0,
                  spk_emb=None,
                  spk_id=None,
-                 tone_id=None) -> Sequence[paddle.Tensor]:
+                 tone_id=None,
+                 is_train_diffusion=False) -> Sequence[paddle.Tensor]:
         # forward encoder
         x_masks = self._source_mask(ilens)
         # (B, Tmax, adim)
@@ -639,7 +640,16 @@ class FastSpeech2(nn.Layer):
         else:
             e_outs = self.energy_predictor(hs, d_masks.unsqueeze(-1))
 
-        if is_inference:
+        # inference for decoder input for diffusion
+        if is_train_diffusion:
+            d_outs = self.duration_predictor(hs, d_masks)
+            p_embs = self.pitch_embed(p_outs.transpose((0, 2, 1))).transpose(
+                (0, 2, 1))
+            e_embs = self.energy_embed(e_outs.transpose((0, 2, 1))).transpose((0, 2, 1))
+            hs = hs + e_embs + p_embs
+            hs = self.length_regulator(hs, ds, is_inference=False)
+            
+        elif is_inference:
             # (B, Tmax)
             if ds is not None:
                 d_outs = ds
@@ -740,6 +750,42 @@ class FastSpeech2(nn.Layer):
             spk_id=spk_id,
             tone_id=tone_id)
         return hs
+
+    # get encoder output for diffusion training
+    def encoder_infer_batch(
+            self,
+            text: paddle.Tensor,
+            text_lengths: paddle.Tensor,
+            speech_lengths: paddle.Tensor,
+            ds: paddle.Tensor=None,
+            ps: paddle.Tensor=None,
+            es: paddle.Tensor=None,
+            alpha: float=1.0,
+            spk_emb=None,
+            spk_id=None, ) -> Tuple[paddle.Tensor, paddle.Tensor]:
+
+        xs = paddle.cast(text, 'int64')
+        ilens = paddle.cast(text_lengths, 'int64')
+        olens = paddle.cast(speech_lengths, 'int64')
+
+        if spk_emb is not None:
+            spk_emb = spk_emb.unsqueeze(0)
+
+        # (1, L, odim)
+        # use *_ to avoid bug in dygraph to static graph    
+        hs, h_masks = self._forward(
+            xs=xs,
+            ilens=ilens,
+            olens=olens,
+            ds=ds,
+            ps=ps,
+            es=es,
+            return_after_enc=True,
+            is_train_diffusion=True,
+            alpha=alpha,
+            spk_emb=spk_emb,
+            spk_id=spk_id, )
+        return hs, h_masks
 
     def inference(
             self,

@@ -21,6 +21,7 @@ import paddle
 import ppdiffusers
 from paddle import nn
 from ppdiffusers.schedulers import DDPMScheduler
+from typeguard import check_argument_types
 
 
 class GaussianDiffusion(nn.Layer):
@@ -289,16 +290,16 @@ class GaussianDiffusion(nn.Layer):
 
         # set timesteps
         scheduler.set_timesteps(num_inference_steps)
+        timesteps = paddle.to_tensor(
+                np.flipud(np.arange(num_inference_steps)))
 
         noisy_input = noise
-        if self.stretch and ref_x is not None:
-            ref_x = ref_x.transpose((0, 2, 1))
-            ref_x = self.norm_spec(ref_x)
-            ref_x = ref_x.transpose((0, 2, 1))
+        if ref_x is not None:
+            if self.stretch:
+                ref_x = ref_x.transpose((0, 2, 1))
+                ref_x = self.norm_spec(ref_x)
+                ref_x = ref_x.transpose((0, 2, 1))
 
-            # for ddpm
-            timesteps = paddle.to_tensor(
-                np.flipud(np.arange(num_inference_steps)))
             noisy_input = scheduler.add_noise(ref_x, noise, timesteps[0])
 
         denoised_output = noisy_input
@@ -320,3 +321,70 @@ class GaussianDiffusion(nn.Layer):
             denoised_output = denoised_output.transpose((0, 2, 1))
 
         return denoised_output
+
+
+class DiffusionLoss(nn.Layer):
+    """Loss function module for Diffusion module on DiffSinger."""
+
+    def __init__(self, use_masking: bool=True,
+                 use_weighted_masking: bool=False):
+        """Initialize feed-forward Transformer loss module.
+        Args:
+            use_masking (bool): 
+                Whether to apply masking for padded part in loss calculation.
+            use_weighted_masking (bool): 
+                Whether to weighted masking in loss calculation.
+        """
+        assert check_argument_types()
+        super().__init__()
+
+        assert (use_masking != use_weighted_masking) or not use_masking
+        self.use_masking = use_masking
+        self.use_weighted_masking = use_weighted_masking
+
+        # define criterions
+        reduction = "none" if self.use_weighted_masking else "mean"
+        self.l1_criterion = nn.L1Loss(reduction=reduction)
+
+    def forward(
+            self,
+            noise_pred: paddle.Tensor,
+            noise_target: paddle.Tensor,
+            mel_masks: paddle.Tensor, ) -> paddle.Tensor:
+        """Calculate forward propagation.
+
+        Args:
+            noise_pred(Tensor): 
+                Batch of outputs predict noise (B, Lmax, odim).
+            noise_target(Tensor):  
+                Batch of target noise (B, Lmax, odim).
+            mel_masks(Tensor): 
+                Batch of mask of real mel (B, Lmax, 1).
+        Returns:
+        
+        """
+        # apply mask to remove padded part
+        if self.use_masking:
+            noise_pred = noise_pred.masked_select(
+                mel_masks.broadcast_to(noise_pred.shape))
+            noise_target = noise_target.masked_select(
+                mel_masks.broadcast_to(noise_target.shape))
+
+        # calculate loss
+        l1_loss = self.l1_criterion(noise_pred, noise_target)
+
+        # make weighted mask and apply it
+        if self.use_weighted_masking:
+            mel_masks = mel_masks.unsqueeze(-1)
+            out_weights = mel_masks.cast(dtype=paddle.float32) / mel_masks.cast(
+                dtype=paddle.float32).sum(
+                    axis=1, keepdim=True)
+            out_weights /= noise_target.shape[0] * noise_target.shape[2]
+
+            # apply weight
+            l1_loss = l1_loss.multiply(out_weights)
+            l1_loss = l1_loss.masked_select(
+                mel_masks.broadcast_to(l1_loss.shape)).sum()
+
+        return l1_loss
+

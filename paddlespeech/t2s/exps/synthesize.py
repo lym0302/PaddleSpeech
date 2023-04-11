@@ -86,7 +86,7 @@ def evaluate(args):
         with timer() as t:
             with paddle.no_grad():
                 # acoustic model
-                if am_name == 'fastspeech2':
+                if am_name == 'fastspeech2' or am_name == 'diffspeech':
                     phone_ids = paddle.to_tensor(datum["text"])
                     spk_emb = None
                     spk_id = None
@@ -95,8 +95,13 @@ def evaluate(args):
                         spk_emb = paddle.to_tensor(np.load(datum["spk_emb"]))
                     elif "spk_id" in datum:
                         spk_id = paddle.to_tensor(datum["spk_id"])
-                    mel = am_inference(
-                        phone_ids, spk_id=spk_id, spk_emb=spk_emb)
+                    if am_name == 'fastspeech2':
+                        mel = am_inference(
+                            phone_ids, spk_id=spk_id, spk_emb=spk_emb)
+                    elif am_name == 'diffspeech':
+                        get_mel_fs2 = False
+                        mel = am_inference(
+                            phone_ids, spk_id=spk_id, spk_emb=spk_emb, get_mel_fs2=get_mel_fs2)
                 elif am_name == 'speedyspeech':
                     phone_ids = paddle.to_tensor(datum["phones"])
                     tone_ids = paddle.to_tensor(datum["tones"])
@@ -122,6 +127,16 @@ def evaluate(args):
                         note_dur=note_dur,
                         is_slur=is_slur,
                         get_mel_fs2=get_mel_fs2)
+
+    #             T += t.elapse
+    #             N += mel.shape[0] * 300
+    #             print(mel.shape)
+            
+    # rtf = T / (N / am_config.fs)
+    # print("RRRRRRRRRRRRRRTF: ", rtf)
+
+
+
                 # vocoder
                 wav = voc_inference(mel)
 
@@ -160,6 +175,7 @@ def parse_args():
             'fastspeech2_mix',
             'fastspeech2_canton',
             'diffsinger_opencpop',
+            'diffspeech_csmsc',
         ],
         help='Choose acoustic model type of tts task.')
     parser.add_argument(
