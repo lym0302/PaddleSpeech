@@ -237,7 +237,9 @@ class DiffSpeech(nn.Layer):
             speech_lengths=speech_lengths,
             ds=durations,
             ps=pitch,
-            es=energy)
+            es=energy,
+            spk_id=spk_id,
+            spk_emb=spk_emb)
         cond_fs2 = cond_fs2.transpose((0, 2, 1))
 
         # get the output(final mel) from diffusion module
@@ -271,9 +273,8 @@ class DiffSpeech(nn.Layer):
         mel_fs2, _, _, _ = self.fs2.inference(text=text, spk_emb=spk_emb, spk_id=spk_id,)
         if get_mel_fs2:
             return mel_fs2
-        # print("mmmmmmmmmmel: ", mel_fs2)
         mel_fs2 = mel_fs2.unsqueeze(0).transpose((0, 2, 1))
-        cond_fs2 = self.fs2.encoder_infer(text)
+        cond_fs2 = self.fs2.encoder_infer(text=text, spk_emb=spk_emb, spk_id=spk_id,)
         cond_fs2 = cond_fs2.transpose((0, 2, 1))
         noise = paddle.randn(mel_fs2.shape)
         mel = self.diffusion.inference(

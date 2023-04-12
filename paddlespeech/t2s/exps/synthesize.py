@@ -176,6 +176,7 @@ def parse_args():
             'fastspeech2_canton',
             'diffsinger_opencpop',
             'diffspeech_csmsc',
+            'diffspeech_aishell3',
         ],
         help='Choose acoustic model type of tts task.')
     parser.add_argument(
